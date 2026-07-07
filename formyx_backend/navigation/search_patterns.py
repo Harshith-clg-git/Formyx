@@ -143,3 +143,99 @@ def generate_lawnmower(
 
     log.info("Generated %d waypoints for lawnmower.", len(waypoints))
     return waypoints
+
+
+def generate_orbital_sweep(
+    radius_m: float = 2.0,
+    num_points: int = 8,
+) -> List[Tuple[float, float]]:
+    """
+    Generate relative (x, y) waypoint offsets in meters describing a circular
+    orbital sweep around the current position. Used for local visual search.
+
+    Parameters
+    ----------
+    radius_m : float
+        Radius of the circle in meters.
+    num_points : int
+        Number of waypoints to generate along the circle.
+
+    Returns
+    -------
+    List[Tuple[float, float]]
+        List of relative (x, y) coordinates.
+    """
+    log.info(
+        "Generating orbital visual sweep: radius=%.1fm, points=%d",
+        radius_m,
+        num_points,
+    )
+    waypoints: List[Tuple[float, float]] = []
+    
+    # Generate points along the circle: theta from 0 to 2*pi
+    for i in range(num_points):
+        theta = (2.0 * math.pi * i) / num_points
+        x = radius_m * math.cos(theta)
+        y = radius_m * math.sin(theta)
+        waypoints.append((x, y))
+        
+    return waypoints
+
+
+def generate_yaw_sweep_pattern(
+    sweep_range_deg: float = 45.0,
+    step_deg: float = 15.0,
+) -> List[float]:
+    """
+    Generate a relative yaw angle sweep sequence (in degrees) to search left
+    and right for a lost target.
+
+    For example, with range=45 and step=15, returns:
+    [15.0, 30.0, 45.0, 30.0, 15.0, 0.0, -15.0, -30.0, -45.0, -30.0, -15.0, 0.0]
+
+    Parameters
+    ----------
+    sweep_range_deg : float
+        Maximum degrees to rotate left and right.
+    step_deg : float
+        Angle increment step in degrees.
+
+    Returns
+    -------
+    List[float]
+        Sequence of relative target yaw angles in degrees.
+    """
+    log.info(
+        "Generating yaw visual sweep pattern: range=±%.1f°, step=%.1f°",
+        sweep_range_deg,
+        step_deg,
+    )
+    
+    angles: List[float] = []
+    
+    # 1. Sweep right (positive yaw)
+    curr = step_deg
+    while curr <= sweep_range_deg:
+        angles.append(curr)
+        curr += step_deg
+        
+    # 2. Sweep back to center
+    curr = sweep_range_deg - step_deg
+    while curr >= 0.0:
+        angles.append(curr)
+        curr -= step_deg
+        
+    # 3. Sweep left (negative yaw)
+    curr = -step_deg
+    while curr >= -sweep_range_deg:
+        angles.append(curr)
+        curr -= step_deg
+        
+    # 4. Sweep back to center
+    curr = -sweep_range_deg + step_deg
+    while curr <= 0.0:
+        angles.append(curr)
+        curr += step_deg
+        
+    return angles
+
