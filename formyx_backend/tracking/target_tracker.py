@@ -167,9 +167,11 @@ class TargetTracker:
         # Update state: x = x + K * y
         self._x = self._x + K.dot(y)
 
-        # Update covariance: P = (I - K * H) * P
+        # Update covariance using numerically stable Joseph form:
+        # P = (I - K*H) * P * (I - K*H)^T + K * R * K^T
         I = np.eye(6, dtype=np.float64)
-        self._P = (I - K.dot(self._H)).dot(self._P)
+        I_KH = I - K.dot(self._H)
+        self._P = I_KH.dot(self._P).dot(I_KH.T) + K.dot(self._R).dot(K.T)
 
         self.lost_frames = 0
         return True

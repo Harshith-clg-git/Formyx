@@ -157,6 +157,8 @@ TRANSITION_TABLE: dict[tuple[MissionState, MissionEvent], MissionState] = {
         MissionState.RTL,
     (MissionState.TARGET_LOST_RECOVERY, MissionEvent.BATTERY_CRITICAL):
         MissionState.RTL,
+    (MissionState.TAKEOFF,           MissionEvent.BATTERY_CRITICAL):
+        MissionState.RTL,
 
     (MissionState.NAVIGATING_TO_GPS, MissionEvent.GEOFENCE_BREACH):
         MissionState.RTL,
@@ -164,8 +166,22 @@ TRANSITION_TABLE: dict[tuple[MissionState, MissionEvent], MissionState] = {
         MissionState.RTL,
     (MissionState.TRACKING,          MissionEvent.GEOFENCE_BREACH):
         MissionState.RTL,
+    (MissionState.TARGET_LOST_RECOVERY, MissionEvent.GEOFENCE_BREACH):
+        MissionState.RTL,
+    (MissionState.TAKEOFF,           MissionEvent.GEOFENCE_BREACH):
+        MissionState.RTL,
 
-    # Heartbeat loss → emergency from ANY flying state
+    # GPS degraded → RTL from any flying state
+    (MissionState.NAVIGATING_TO_GPS, MissionEvent.GPS_DEGRADED):
+        MissionState.RTL,
+    (MissionState.SEARCHING,         MissionEvent.GPS_DEGRADED):
+        MissionState.RTL,
+    (MissionState.TRACKING,          MissionEvent.GPS_DEGRADED):
+        MissionState.RTL,
+    (MissionState.TARGET_LOST_RECOVERY, MissionEvent.GPS_DEGRADED):
+        MissionState.RTL,
+
+    # Heartbeat loss → emergency from ANY flying state (including LANDING/RTL)
     (MissionState.PRE_FLIGHT_CHECKS, MissionEvent.HEARTBEAT_LOST):
         MissionState.EMERGENCY,
     (MissionState.ARMING,            MissionEvent.HEARTBEAT_LOST):
@@ -179,6 +195,10 @@ TRANSITION_TABLE: dict[tuple[MissionState, MissionEvent], MissionState] = {
     (MissionState.TRACKING,          MissionEvent.HEARTBEAT_LOST):
         MissionState.EMERGENCY,
     (MissionState.TARGET_LOST_RECOVERY, MissionEvent.HEARTBEAT_LOST):
+        MissionState.EMERGENCY,
+    (MissionState.LANDING,           MissionEvent.HEARTBEAT_LOST):
+        MissionState.EMERGENCY,
+    (MissionState.RTL,               MissionEvent.HEARTBEAT_LOST):
         MissionState.EMERGENCY,
 
     # Operator abort from any active flying state

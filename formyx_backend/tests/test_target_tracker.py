@@ -162,3 +162,28 @@ def test_intersecting_paths_separation():
     
     success_a = tracker.update((6.0, 0.0, 0.0))
     assert success_a is True, "Tracker failed to associate true continuation path!"
+
+
+def test_covariance_remains_symmetric_psd():
+    """
+    After many predict+update cycles the covariance matrix P must remain
+    symmetric and positive-semidefinite (all eigenvalues >= 0).
+    Validates the Joseph-form covariance update is numerically stable.
+    """
+    tracker = TargetTracker()
+    tracker.update((1.0, 0.0, 0.0))
+
+    for i in range(50):
+        tracker.predict(dt=0.1)
+        tracker.update((1.0 + i * 0.05, 0.0, 0.0))
+
+    P = tracker._P
+
+    # Symmetry check
+    assert np.allclose(P, P.T, atol=1e-9), "Covariance P is not symmetric!"
+
+    # Positive semi-definite: all eigenvalues >= 0
+    eigenvalues = np.linalg.eigvalsh(P)
+    assert np.all(eigenvalues >= -1e-9), (
+        f"Covariance P is not positive semi-definite! Min eigenvalue: {eigenvalues.min():.2e}"
+    )

@@ -49,6 +49,7 @@ tracking:
   mahalanobis_gate_distance: 9.21   # chi-squared 99th percentile (3-DOF)
   max_lost_frames: 30               # Frames before tracker is dropped
   target_lost_timeout_s: 2.0        # Seconds before switching to recovery
+  velocity_damping: 0.1             # Per-second velocity decay during prediction
 
 navigation:
   max_horizontal_speed_ms: 3.0    # m/s cap for follow commands
@@ -57,6 +58,8 @@ navigation:
   position_tolerance_m: 0.5       # Acceptable GPS position error
   search_radius_m: 10.0           # Radius for expanding square search
   yaw_scan_rate_dps: 20.0         # Deg/s during visual-sweep recovery
+  kp_xy: 0.5                      # Proportional gain for horizontal follow
+  kp_z: 0.5                       # Proportional gain for vertical follow
 
 logging:
   log_dir: "logs"

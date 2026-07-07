@@ -114,6 +114,7 @@ class TestHappyPathMission:
 class TestSafetyEscalations:
 
     @pytest.mark.parametrize("start_state", [
+        S.TAKEOFF,
         S.NAVIGATING_TO_GPS,
         S.SEARCHING,
         S.TRACKING,
@@ -124,9 +125,11 @@ class TestSafetyEscalations:
         assert _drive(sm, E.BATTERY_CRITICAL) == S.RTL
 
     @pytest.mark.parametrize("start_state", [
+        S.TAKEOFF,
         S.NAVIGATING_TO_GPS,
         S.SEARCHING,
         S.TRACKING,
+        S.TARGET_LOST_RECOVERY,
     ])
     def test_geofence_breach_triggers_rtl(self, start_state):
         sm = _sm(state=start_state)
@@ -140,10 +143,23 @@ class TestSafetyEscalations:
         S.SEARCHING,
         S.TRACKING,
         S.TARGET_LOST_RECOVERY,
+        S.LANDING,
+        S.RTL,
     ])
     def test_heartbeat_loss_triggers_emergency(self, start_state):
         sm = _sm(state=start_state)
         assert _drive(sm, E.HEARTBEAT_LOST) == S.EMERGENCY
+
+    @pytest.mark.parametrize("start_state", [
+        S.NAVIGATING_TO_GPS,
+        S.SEARCHING,
+        S.TRACKING,
+        S.TARGET_LOST_RECOVERY,
+    ])
+    def test_gps_degraded_triggers_rtl(self, start_state):
+        """GPS_DEGRADED from any flying state must trigger RTL."""
+        sm = _sm(state=start_state)
+        assert _drive(sm, E.GPS_DEGRADED) == S.RTL
 
     @pytest.mark.parametrize("start_state", [
         S.TAKEOFF,

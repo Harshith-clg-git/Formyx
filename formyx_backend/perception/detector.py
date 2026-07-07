@@ -13,7 +13,13 @@ from typing import Any, Dict, List, Tuple
 
 import cv2
 import numpy as np
-from ultralytics import YOLO
+
+try:
+    from ultralytics import YOLO
+    HAS_ULTRALYTICS = True
+except ImportError:
+    HAS_ULTRALYTICS = False
+    YOLO = None  # type: ignore[assignment,misc]
 
 from config import get
 
@@ -26,6 +32,12 @@ class BalloonDetector:
     """
 
     def __init__(self, model_path: str | None = None) -> None:
+        if not HAS_ULTRALYTICS:
+            raise ImportError(
+                "The 'ultralytics' package is required for BalloonDetector. "
+                "Install it with: pip install ultralytics"
+            )
+
         cfg_path = model_path or get("perception", "model_path", "models/balloon_detector.pt")
         self.model_path = Path(cfg_path)
         
