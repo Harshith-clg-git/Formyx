@@ -25,7 +25,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 from pymavlink import mavutil
 
@@ -46,7 +46,7 @@ class TelemetrySnapshot:
     """
     # Connectivity
     connected: bool = False
-    last_heartbeat_ts: float = 0.0          # epoch seconds
+    last_heartbeat_ts: float = field(default_factory=time.monotonic)  # monotonic seconds
 
     # GLOBAL_POSITION_INT
     lat_deg: float = 0.0
