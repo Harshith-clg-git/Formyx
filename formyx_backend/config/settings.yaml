@@ -1,0 +1,64 @@
+# ============================================================
+# Formyx Backend — Global Configuration
+# Edit this file to tune connection, hardware, and mission
+# parameters without touching source code.
+# ============================================================
+
+mavlink:
+  # Connection string for ArduPilot (pymavlink format).
+  # SITL (UDP):          "udpin:localhost:14550"
+  # Pi USB (ACM):        "/dev/ttyACM0,57600"   ← active for hardware test
+  # Pi USB (FTDI):       "/dev/ttyUSB0,57600"
+  # Pi UART (TELEM2):    "/dev/ttyAMA0,921600"
+  connection_string: "/dev/ttyACM0,57600"
+  heartbeat_timeout_s: 5          # Seconds to wait for first heartbeat
+  telemetry_rate_hz: 10           # Requested telemetry stream rate
+  reconnect_attempts: 5           # Auto-reconnect retries on link drop
+  reconnect_delay_s: 2.0          # Seconds between reconnect attempts
+
+vehicle:
+  default_takeoff_altitude_m: 3.0 # AGL takeoff altitude (metres)
+  guided_mode_name: "GUIDED"
+  loiter_mode_name: "LOITER"
+  rtl_mode_name: "RTL"
+  land_mode_name: "LAND"
+
+safety:
+  battery_critical_pct: 15        # Trigger RTL below this battery %
+  battery_warning_pct: 25         # Log warning below this battery %
+  gps_min_satellites: 6           # Minimum satellites for GUIDED ops
+  max_geofence_radius_m: 50.0     # Horizontal geofence from home (metres)
+  max_altitude_m: 15.0            # Hard ceiling (metres AGL)
+  heartbeat_loss_timeout_s: 3.0   # Trigger failsafe if heartbeat lost
+
+perception:
+  model_path: "models/balloon_detector.pt"   # Path to YOLOv8 .pt file
+  confidence_threshold: 0.60                  # Minimum detection confidence
+  inference_resolution: [320, 320]            # [width, height] for inference
+  target_class_id: 0                          # YOLO class ID for 'balloon'
+
+depth:
+  # Patch averaging window (pixels) for depth shadow mitigation
+  depth_patch_size: 15
+  min_valid_depth_m: 0.3
+  max_valid_depth_m: 10.0
+
+tracking:
+  kalman_process_noise: 0.1
+  kalman_measurement_noise: 0.5
+  mahalanobis_gate_distance: 9.21   # chi-squared 99th percentile (3-DOF)
+  max_lost_frames: 30               # Frames before tracker is dropped
+  target_lost_timeout_s: 2.0        # Seconds before switching to recovery
+
+navigation:
+  max_horizontal_speed_ms: 3.0    # m/s cap for follow commands
+  max_vertical_speed_ms: 1.5
+  follow_distance_m: 3.0          # Desired stand-off from target
+  position_tolerance_m: 0.5       # Acceptable GPS position error
+  search_radius_m: 10.0           # Radius for expanding square search
+  yaw_scan_rate_dps: 20.0         # Deg/s during visual-sweep recovery
+
+logging:
+  log_dir: "logs"
+  log_rate_hz: 10
+  max_log_files: 5                # Rotate after N sessions (test spec: ≤ 5)

@@ -1,0 +1,27 @@
+# ============================================================
+# Formyx Autonomous Drone Backend — Dependency Manifest
+# Target Platform: Raspberry Pi 5 (ARM64, Python 3.11+)
+# ============================================================
+
+# --- Core Computer Vision ---
+opencv-python>=4.8.0          # Image processing & display
+numpy>=1.23.0                 # Numerical operations / linear algebra
+
+# --- Object Detection (YOLO) ---
+ultralytics>=8.3.0            # YOLOv8/v9 model inference
+
+# --- Intel RealSense D435i ---
+pyrealsense2>=2.50.0          # RealSense depth camera SDK
+
+# --- MAVLink / Flight Controller ---
+pymavlink>=2.4.41             # Raw MAVLink protocol parsing
+
+# --- Configuration ---
+pyyaml>=6.0.1                 # YAML config file parsing
+
+# --- Async & Multiprocessing ---
+# (stdlib: asyncio, multiprocessing, threading — no pip needed)
+
+# --- Testing ---
+pytest>=8.0.0                 # Unit test runner
+pytest-mock>=3.12.0           # Mocking for tests (drone hardware replacement)
