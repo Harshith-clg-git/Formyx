@@ -1,7 +1,15 @@
 """
 tests/test_detector.py
 ----------------------
-Unit tests for the BalloonDetector class.
+Unit tests for ObjectDetector (formerly BalloonDetector).
+
+Tests cover:
+  - Model loading / missing weights
+  - Multi-class detection: balloon (class 0) AND drone (class 1)
+  - Class filtering via target_class_ids
+  - Convenience wrappers: detect_balloons() / detect_drones()
+  - Detection dict schema: label field is present and correct
+  - Edge-case inputs: None frame, empty frame
 """
 
 from __future__ import annotations
@@ -16,47 +24,26 @@ _BACKEND = pathlib.Path(__file__).parent.parent
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
-from perception.detector import BalloonDetector
+from perception.detector import ObjectDetector, BalloonDetector, TargetClass
 
 
-def test_detector_missing_weights_raises_error():
-    """Verify that FileNotFoundError is raised if model weights are missing."""
-    with pytest.raises(FileNotFoundError):
-        # Pass a path that definitely doesn't exist
-        BalloonDetector(model_path="models/does_not_exist_xyz.pt")
-
-
-@patch("perception.detector.YOLO")
-def test_detector_initialization(mock_yolo, tmp_path):
-    """Verify that detector loads config settings and initializes YOLO when file exists."""
-    dummy_model = tmp_path / "dummy_detector.pt"
-    dummy_model.write_text("fake weights")
-
-    detector = BalloonDetector(model_path=str(dummy_model))
-
-    assert detector.model_path == dummy_model
-    assert detector.conf_threshold == 0.60
-    assert detector.resolution == (320, 320)
-    assert detector.class_id == 0
-    mock_yolo.assert_called_once_with(str(dummy_model))
-
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _make_mock_yolo_result(bboxes, confs, clss):
-    """Helper to build nested mock structure for YOLO result.boxes."""
+    """Build a nested mock object mimicking a YOLO result.boxes structure."""
     mock_result = MagicMock()
-    mock_boxes = MagicMock()
+    mock_boxes  = MagicMock()
 
-    # Mock xyxy.cpu().numpy()
     mock_xyxy = MagicMock()
     mock_xyxy.cpu.return_value.numpy.return_value = np.array(bboxes, dtype=np.float32)
     mock_boxes.xyxy = mock_xyxy
 
-    # Mock conf.cpu().numpy()
     mock_conf = MagicMock()
     mock_conf.cpu.return_value.numpy.return_value = np.array(confs, dtype=np.float32)
     mock_boxes.conf = mock_conf
 
-    # Mock cls.cpu().numpy()
     mock_cls = MagicMock()
     mock_cls.cpu.return_value.numpy.return_value = np.array(clss, dtype=np.float32)
     mock_boxes.cls = mock_cls
@@ -65,78 +52,203 @@ def _make_mock_yolo_result(bboxes, confs, clss):
     return mock_result
 
 
-@patch("perception.detector.YOLO")
-def test_detect_parses_outputs_correctly(mock_yolo, tmp_path):
-    """Verify that detection boxes are parsed, center is computed, and results mapped."""
+def _make_detector(tmp_path, mock_yolo):
+    """Create an ObjectDetector with a dummy weights file."""
     dummy_model = tmp_path / "dummy_detector.pt"
     dummy_model.write_text("fake weights")
+    mock_yolo.return_value = MagicMock()
+    return ObjectDetector(model_path=str(dummy_model))
 
-    # Set up mock YOLO call output
-    mock_yolo_inst = MagicMock()
-    mock_yolo.return_value = mock_yolo_inst
 
-    detector = BalloonDetector(model_path=str(dummy_model))
+# ---------------------------------------------------------------------------
+# 1. Model Loading
+# ---------------------------------------------------------------------------
 
-    # Mock frame
-    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+def test_detector_missing_weights_raises_file_not_found():
+    """FileNotFoundError when model weights don't exist."""
+    with pytest.raises(FileNotFoundError):
+        ObjectDetector(model_path="models/does_not_exist_xyz.pt")
 
-    # 1 detection: class 0 (balloon), conf 0.85, bbox (100, 100, 200, 200)
+
+@patch("perception.detector.YOLO")
+def test_detector_initialisation_stores_config(mock_yolo, tmp_path):
+    """Verify default config values are stored and YOLO is called once."""
+    detector = _make_detector(tmp_path, mock_yolo)
+
+    assert detector.conf_threshold == 0.60
+    assert detector.resolution == (320, 320)
+    # Both classes active by default
+    assert TargetClass.BALLOON in detector.target_class_ids
+    assert TargetClass.DRONE   in detector.target_class_ids
+    mock_yolo.assert_called_once()
+
+
+@patch("perception.detector.YOLO")
+def test_backwards_compat_alias(mock_yolo, tmp_path):
+    """BalloonDetector is an alias for ObjectDetector — must not break imports."""
+    dummy = tmp_path / "dummy.pt"
+    dummy.write_text("fake")
+    mock_yolo.return_value = MagicMock()
+    detector = BalloonDetector(model_path=str(dummy))
+    assert isinstance(detector, ObjectDetector)
+
+
+# ---------------------------------------------------------------------------
+# 2. Balloon detection (class 0)
+# ---------------------------------------------------------------------------
+
+@patch("perception.detector.YOLO")
+def test_detect_balloon_returns_correct_dict(mock_yolo, tmp_path):
+    """Balloon detection dict has correct keys, values, and label."""
+    detector = _make_detector(tmp_path, mock_yolo)
     mock_result = _make_mock_yolo_result(
         bboxes=[[100.0, 100.0, 200.0, 200.0]],
         confs=[0.85],
-        clss=[0]
+        clss=[0],  # balloon
     )
-    mock_yolo_inst.return_value = [mock_result]
-
-    detections = detector.detect(frame)
-
-    assert len(detections) == 1
-    det = detections[0]
-    assert det["bbox"] == (100.0, 100.0, 200.0, 200.0)
-    assert det["center"] == (150.0, 150.0)  # center of 100 and 200
-    assert pytest.approx(det["confidence"]) == 0.85
-    assert det["class_id"] == 0
-
-
-@patch("perception.detector.YOLO")
-def test_detect_filters_by_class_id(mock_yolo, tmp_path):
-    """Verify that detections with class IDs other than the configured class_id are ignored."""
-    dummy_model = tmp_path / "dummy_detector.pt"
-    dummy_model.write_text("fake weights")
-
-    mock_yolo_inst = MagicMock()
-    mock_yolo.return_value = mock_yolo_inst
-
-    detector = BalloonDetector(model_path=str(dummy_model))
-    # Configured class_id is 0.
-
-    # 2 detections: class 0 (match) and class 1 (ignore)
-    mock_result = _make_mock_yolo_result(
-        bboxes=[[50.0, 50.0, 150.0, 150.0], [200.0, 200.0, 300.0, 300.0]],
-        confs=[0.90, 0.75],
-        clss=[0, 1]
-    )
-    mock_yolo_inst.return_value = [mock_result]
+    detector.model.return_value = [mock_result]
 
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     detections = detector.detect(frame)
 
-    # Should only return class 0 detection
     assert len(detections) == 1
-    assert detections[0]["class_id"] == 0
-    assert detections[0]["bbox"] == (50.0, 50.0, 150.0, 150.0)
+    d = detections[0]
+    assert d["bbox"]       == (100.0, 100.0, 200.0, 200.0)
+    assert d["center"]     == (150.0, 150.0)
+    assert pytest.approx(d["confidence"]) == 0.85
+    assert d["class_id"]   == TargetClass.BALLOON
+    assert d["label"]      == "balloon"
+
+
+# ---------------------------------------------------------------------------
+# 3. Drone detection (class 1)
+# ---------------------------------------------------------------------------
+
+@patch("perception.detector.YOLO")
+def test_detect_drone_returns_correct_dict(mock_yolo, tmp_path):
+    """Drone detection dict has correct keys, values, and label."""
+    detector = _make_detector(tmp_path, mock_yolo)
+    mock_result = _make_mock_yolo_result(
+        bboxes=[[50.0, 60.0, 150.0, 160.0]],
+        confs=[0.92],
+        clss=[1],  # drone
+    )
+    detector.model.return_value = [mock_result]
+
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    detections = detector.detect(frame)
+
+    assert len(detections) == 1
+    d = detections[0]
+    assert d["class_id"] == TargetClass.DRONE
+    assert d["label"]    == "drone"
+    assert pytest.approx(d["confidence"]) == 0.92
+
+
+# ---------------------------------------------------------------------------
+# 4. Multi-class — balloon + drone in same frame
+# ---------------------------------------------------------------------------
+
+@patch("perception.detector.YOLO")
+def test_detect_returns_both_balloon_and_drone(mock_yolo, tmp_path):
+    """Both class IDs returned when present in the same frame."""
+    detector = _make_detector(tmp_path, mock_yolo)
+    mock_result = _make_mock_yolo_result(
+        bboxes=[
+            [10.0, 10.0, 80.0, 80.0],    # balloon
+            [200.0, 200.0, 300.0, 300.0], # drone
+        ],
+        confs=[0.88, 0.75],
+        clss=[0, 1],
+    )
+    detector.model.return_value = [mock_result]
+
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    detections = detector.detect(frame)
+
+    assert len(detections) == 2
+    labels = {d["label"] for d in detections}
+    assert labels == {"balloon", "drone"}
+
+
+# ---------------------------------------------------------------------------
+# 5. Class filtering — unknown class ignored
+# ---------------------------------------------------------------------------
+
+@patch("perception.detector.YOLO")
+def test_detect_ignores_unknown_class_id(mock_yolo, tmp_path):
+    """Class IDs not in target_class_ids are silently discarded."""
+    detector = _make_detector(tmp_path, mock_yolo)
+    mock_result = _make_mock_yolo_result(
+        bboxes=[
+            [50.0, 50.0, 150.0, 150.0],   # balloon  → keep
+            [200.0, 200.0, 300.0, 300.0],  # class 99 → ignore
+        ],
+        confs=[0.90, 0.75],
+        clss=[0, 99],
+    )
+    detector.model.return_value = [mock_result]
+
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    detections = detector.detect(frame)
+
+    assert len(detections) == 1
+    assert detections[0]["class_id"] == TargetClass.BALLOON
+
+
+# ---------------------------------------------------------------------------
+# 6. Convenience wrappers
+# ---------------------------------------------------------------------------
+
+@patch("perception.detector.YOLO")
+def test_detect_balloons_filters_correctly(mock_yolo, tmp_path):
+    """detect_balloons() returns only balloon detections."""
+    detector = _make_detector(tmp_path, mock_yolo)
+    mock_result = _make_mock_yolo_result(
+        bboxes=[[10.0, 10.0, 80.0, 80.0], [200.0, 200.0, 300.0, 300.0]],
+        confs=[0.88, 0.75],
+        clss=[0, 1],
+    )
+    detector.model.return_value = [mock_result]
+
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    results = detector.detect_balloons(frame)
+
+    assert all(d["class_id"] == TargetClass.BALLOON for d in results)
+    assert len(results) == 1
 
 
 @patch("perception.detector.YOLO")
-def test_detect_handles_empty_or_invalid_inputs(mock_yolo, tmp_path):
-    """Verify detect returns empty lists for None frame, empty frame, or no detections."""
-    dummy_model = tmp_path / "dummy_detector.pt"
-    dummy_model.write_text("fake weights")
+def test_detect_drones_filters_correctly(mock_yolo, tmp_path):
+    """detect_drones() returns only drone detections."""
+    detector = _make_detector(tmp_path, mock_yolo)
+    mock_result = _make_mock_yolo_result(
+        bboxes=[[10.0, 10.0, 80.0, 80.0], [200.0, 200.0, 300.0, 300.0]],
+        confs=[0.88, 0.75],
+        clss=[0, 1],
+    )
+    detector.model.return_value = [mock_result]
 
-    detector = BalloonDetector(model_path=str(dummy_model))
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    results = detector.detect_drones(frame)
 
-    # None frame
+    assert all(d["class_id"] == TargetClass.DRONE for d in results)
+    assert len(results) == 1
+
+
+# ---------------------------------------------------------------------------
+# 7. Edge cases
+# ---------------------------------------------------------------------------
+
+@patch("perception.detector.YOLO")
+def test_detect_returns_empty_for_none_frame(mock_yolo, tmp_path):
+    """detect() returns [] for a None input frame."""
+    detector = _make_detector(tmp_path, mock_yolo)
     assert detector.detect(None) == []
 
-    # Empty frame (size 0)
+
+@patch("perception.detector.YOLO")
+def test_detect_returns_empty_for_empty_frame(mock_yolo, tmp_path):
+    """detect() returns [] for a zero-size array."""
+    detector = _make_detector(tmp_path, mock_yolo)
     assert detector.detect(np.array([])) == []

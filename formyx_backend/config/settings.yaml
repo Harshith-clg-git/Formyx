@@ -32,10 +32,12 @@ safety:
   heartbeat_loss_timeout_s: 3.0   # Trigger failsafe if heartbeat lost
 
 perception:
-  model_path: "models/balloon_detector.pt"   # Path to YOLOv8 .pt file
-  confidence_threshold: 0.60                  # Minimum detection confidence
-  inference_resolution: [320, 320]            # [width, height] for inference
-  target_class_id: 0                          # YOLO class ID for 'balloon'
+  model_path: "models/drone_balloon_detector.pt"  # Path to YOLOv8 .pt file
+  confidence_threshold: 0.60                       # Minimum detection confidence
+  inference_resolution: [320, 320]                 # [width, height] for inference
+  # Class IDs to detect (keep both for full mission coverage)
+  # 0 = balloon  |  1 = drone
+  target_class_ids: [0, 1]                         # Detect balloons AND drones
 
 depth:
   # Patch averaging window (pixels) for depth shadow mitigation

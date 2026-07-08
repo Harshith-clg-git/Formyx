@@ -1,6 +1,8 @@
-# Hardware Test Plan — Milestone 5: Balloon Detection Pipeline
+# Hardware Test Plan — Milestone 5: Object Detection Pipeline (Balloon & Drone)
 
-This document outlines the hardware validation cases for the **Balloon Detector** (`perception/detector.py`) running on the companion computer (Raspberry Pi 5) with a connected camera.
+This document outlines the hardware validation cases for the **Object Detector** (`perception/detector.py`) running on the companion computer (Raspberry Pi 5) with a connected camera. The detector targets two classes simultaneously:
+- **Class 0** — `balloon`
+- **Class 1** — `drone`
 
 ---
 
@@ -18,57 +20,63 @@ This document outlines the hardware validation cases for the **Balloon Detector*
 
 *   **Objective**: Confirm that the YOLOv8 model weights file is successfully loaded and initialized on the Raspberry Pi 5 CPU without memory leaks or missing dependencies.
 *   **Pre-conditions**:
-    *   Place the trained weights file `balloon_detector.pt` in `formyx_backend/models/`.
+    *   Place the trained weights file `drone_balloon_detector.pt` (dual-class: balloon + drone) in `formyx_backend/models/`.
     *   Verify PyYAML, OpenCV, and Ultralytics packages are installed.
 *   **Execution Steps**:
     1. SSH into the Raspberry Pi 5.
     2. Open a Python shell in the root of the project directory.
     3. Execute the initialization sequence:
         ```python
-        from perception.detector import BalloonDetector
-        detector = BalloonDetector()
+        from perception.detector import ObjectDetector
+        detector = ObjectDetector()
         print("Model path:", detector.model_path)
+        print("Active classes:", detector.target_class_ids)
         ```
 *   **Expected Results**:
     *   No exception is raised.
-    *   Console log prints: `Loading YOLO model from models/balloon_detector.pt...` followed by `YOLO model loaded successfully on CPU.`
+    *   Console log prints: `Loading YOLO model from models/drone_balloon_detector.pt...` followed by `YOLO model loaded successfully on CPU.`
+    *   `active classes` prints `{0, 1}`.
 *   **Pass/Fail Criteria**:
-    *   **PASS**: Model initializes successfully and log message is printed.
-    *   **FAIL**: Model file is not found, out of memory error, import error, or initialization hangs.
+    *   **PASS**: Model initializes successfully, log message is printed, and active class set is `{0, 1}`.
+    *   **FAIL**: Model file not found, out of memory error, import error, or initialization hangs.
 
 ---
 
-### Test Case 5.2: Real-time Balloon Detection & Coordinate Accuracy
+### Test Case 5.2: Real-time Balloon AND Drone Detection & Coordinate Accuracy
 
-*   **Objective**: Verify the detector class detects a physical balloon with high confidence and produces expected bounding box center coordinate outputs.
+*   **Objective**: Verify the detector class detects both a physical **balloon** and a physical (or simulated) **drone** with high confidence, and produces correct bounding box center coordinate outputs.
 *   **Pre-conditions**:
     *   Connect the camera (Intel RealSense D435i or USB webcam) to the Pi 5.
-    *   Hold a physical balloon (or show an image of one) in front of the lens.
+    *   Have a physical balloon and a small quadrotor (or printed drone image) available to hold in front of the lens.
 *   **Execution Steps**:
-    1. Run a test pipeline script (or custom validation script) that queries frames from the camera and passes them to the detector:
+    1. Run a test pipeline script that queries frames from the camera and passes them to the detector:
         ```python
         import cv2
-        from perception.detector import BalloonDetector
+        from perception.detector import ObjectDetector
         
-        detector = BalloonDetector()
-        cap = cv2.VideoCapture(0) # or realsense stream
+        detector = ObjectDetector()
+        cap = cv2.VideoCapture(0)  # or realsense stream
         
         ret, frame = cap.read()
         if ret:
-            detections = detector.detect(frame)
-            print("Detections found:", detections)
+            detections = detector.detect(frame)  # returns balloons + drones
+            print("All detections:", detections)
+            print("Balloons only:", detector.detect_balloons(frame))
+            print("Drones only  :", detector.detect_drones(frame))
         cap.release()
         ```
     2. Read output detections structure.
-    3. Move the balloon around the frame (left, right, close, far) and verify that the `center` and `bbox` coordinate fields change correspondingly.
+    3. Hold the **balloon** in frame — verify `label == "balloon"` and `class_id == 0`.
+    4. Replace with the **drone** (or drone image) — verify `label == "drone"` and `class_id == 1`.
+    5. Move each target around the frame and verify that the `center` fields change correspondingly.
 *   **Expected Results**:
-    *   A list containing at least one detection dict with keys `bbox`, `center`, `confidence`, and `class_id == 0`.
-    *   Confidence score should be >= 0.60.
-    *   Center X-coordinate increases as the balloon is moved to the right of the frame.
-    *   Center Y-coordinate increases as the balloon is moved down.
+    *   For balloon: detection dict with `label == "balloon"`, `class_id == 0`, `confidence >= 0.60`, correct center coordinates.
+    *   For drone: detection dict with `label == "drone"`, `class_id == 1`, `confidence >= 0.60`, correct center coordinates.
+    *   Center X-coordinate increases as the target is moved to the right.
+    *   Center Y-coordinate increases as the target is moved downward.
 *   **Pass/Fail Criteria**:
-    *   **PASS**: The balloon is successfully detected, confidence matches or exceeds 0.60, and coordinate tracking logic is confirmed.
-    *   **FAIL**: The balloon is not detected in the frame, confidence is low, or coordinate tracking is incorrect.
+    *   **PASS**: Both target classes are detected with confidence ≥ 0.60, correct labels, and correct coordinate tracking.
+    *   **FAIL**: Either class is not detected, confidence is low, label is wrong, or coordinate tracking is incorrect.
 
 ---
 
@@ -82,9 +90,9 @@ This document outlines the hardware validation cases for the **Balloon Detector*
         ```python
         import time
         import cv2
-        from perception.detector import BalloonDetector
+        from perception.detector import ObjectDetector
         
-        detector = BalloonDetector()
+        detector = ObjectDetector()
         cap = cv2.VideoCapture("tests/assets/test_balloon.mp4")
         
         frame_count = 0
@@ -94,7 +102,7 @@ This document outlines the hardware validation cases for the **Balloon Detector*
             ret, frame = cap.read()
             if not ret:
                 break
-            _ = detector.detect(frame)
+            _ = detector.detect(frame)  # detects all classes in one pass
             frame_count += 1
             
         elapsed = time.monotonic() - start_time
