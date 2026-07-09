@@ -22,11 +22,14 @@ class FollowController:
     to track and follow a target in 3D space.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, desired_follow_dist_m: float | None = None) -> None:
         # Load constraints from global settings
         self.max_horiz_speed: float = get("navigation", "max_horizontal_speed_ms", 3.0)
         self.max_vert_speed: float = get("navigation", "max_vertical_speed_ms", 1.5)
-        self.follow_distance: float = get("navigation", "follow_distance_m", 3.0)
+        self.follow_distance: float = (
+            desired_follow_dist_m if desired_follow_dist_m is not None
+            else get("navigation", "follow_distance_m", 3.0)
+        )
         
         # Proportional controller gains
         self.kp_xy: float = get("navigation", "kp_xy", 0.5)
@@ -39,6 +42,12 @@ class FollowController:
             self.max_horiz_speed,
             self.max_vert_speed,
         )
+
+    def compute_velocity_command(
+        self, x: float, y: float, z: float
+    ) -> Tuple[float, float, float]:
+        """Compatibility wrapper for hardware test guide."""
+        return self.get_velocity_command((x, y, z))
 
     def get_velocity_command(
         self, target_rel_pos: Tuple[float, float, float]

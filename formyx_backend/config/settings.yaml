@@ -33,9 +33,14 @@ safety:
 
 perception:
   model_path: "models/balloon_detector.pt"   # Path to YOLOv8 .pt file
+  drone_model_path: "models/yolo11n_drone.pt"
+  balloon_model_path: "models/yolo11n_balloon.pt"
   confidence_threshold: 0.60                  # Minimum detection confidence
   inference_resolution: [320, 320]            # [width, height] for inference
   target_class_id: 0                          # YOLO class ID for 'balloon'
+  class_mappings:
+    balloon: 0
+    drone: 1
 
 depth:
   # Patch averaging window (pixels) for depth shadow mitigation

@@ -1,0 +1,42 @@
+[Unit]
+Description=Formyx MAVLink Flight Log Recorder (logs)
+Documentation=file:///home/dart2/Formyx-master/formyx_backend/logs.py
+# Start after the local filesystem is writable and udev has settled
+After=local-fs.target udev-settle.service
+Wants=udev-settle.service
+
+[Service]
+Type=simple
+User=dart2
+WorkingDirectory=/home/dart2/Formyx-master/formyx_backend
+
+# Wait for the Radiolink PIX6 (/dev/ttyACM0) to enumerate over USB
+ExecStartPre=/bin/sleep 8
+
+ExecStart=/usr/bin/python3 /home/dart2/Formyx-master/formyx_backend/logs.py \
+    --log-dir /home/dart2/Formyx-master/formyx_backend/logs \
+    --rate-hz 10 \
+    --csv-interval 0.5 \
+    --segment-mins 3
+
+# -----------------------------------------------------------------------
+# Clean shutdown: logs.py handles SIGTERM in its _handle_signal() which
+# sets _stop=True, breaking out of the inner recv_match loop, then the
+# finally: block closes the CSV and tlog files cleanly.
+# Give 15 s for the file handles to flush and close.
+# -----------------------------------------------------------------------
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Restart the service if it crashes or the PIX6 is temporarily unplugged
+Restart=on-failure
+RestartSec=8
+
+# Journal logging — view with: journalctl -u formyx-logs -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=formyx-logs
+
+[Install]
+WantedBy=multi-user.target

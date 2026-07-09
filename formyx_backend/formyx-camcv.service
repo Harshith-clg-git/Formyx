@@ -1,0 +1,43 @@
+[Unit]
+Description=Formyx Camera Detection + Video Recorder (camcv)
+Documentation=file:///home/dart2/Formyx-master/formyx_backend/camcv.py
+# Start after the local filesystem is writable and udev has settled
+After=local-fs.target udev-settle.service
+Wants=udev-settle.service
+
+[Service]
+Type=simple
+User=dart2
+WorkingDirectory=/home/dart2/Formyx-master/formyx_backend
+
+# Wait for the UVC webcam (/dev/video0) to fully enumerate over USB 2.0
+ExecStartPre=/bin/sleep 6
+
+ExecStart=/usr/bin/python3 /home/dart2/Formyx-master/formyx_backend/camcv.py \
+    --no-display \
+    --output-dir /home/dart2/Formyx-master/formyx_backend/camrec \
+    --interval 2 \
+    --segment-mins 3
+
+# -----------------------------------------------------------------------
+# Clean shutdown: systemd sends SIGTERM first, then SIGKILL after the
+# TimeoutStopSec window.  Both the video writer and the camera release
+# are inside the finally: block in camcv.py so SIGTERM is enough.
+# Give 20 s for the VideoWriter to finish writing the last few frames
+# and flush the .mp4 index to disk.
+# -----------------------------------------------------------------------
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+# Restart the service if it crashes (hardware glitch / camera unplug)
+Restart=on-failure
+RestartSec=8
+
+# Journal logging — view with: journalctl -u formyx-camcv -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=formyx-camcv
+
+[Install]
+WantedBy=multi-user.target

@@ -47,7 +47,7 @@ def test_logger_initialization(tmp_path):
     """Verify logger parameter loading."""
     logger = BlackBoxLogger(log_dir=str(tmp_path))
     assert logger.log_dir == tmp_path
-    assert logger.max_log_files == 50
+    assert logger.max_log_files == 5
     assert logger.log_rate_hz == 10
 
 
